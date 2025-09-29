@@ -12,6 +12,12 @@ import { nanoid } from "nanoid"; // <-- sin crypto
 // Helpers para códigos/tokens
 const gen6Code = () => (Math.floor(100000 + Math.random() * 900000)).toString(); // 6 dígitos
 
+// Utilidad: dispara una promesa en background y loggea errores
+const bg = (promise, label) =>
+  Promise.resolve(promise)
+    .then(() => console.log(`${label} sent`))
+    .catch((err) => console.error(`${label} failed:`, err?.message || err));
+
 // POST /api/auth/register
 export const register = async (req, res) => {
   try {
@@ -33,11 +39,17 @@ export const register = async (req, res) => {
       isVerified: false
     });
 
-    await sendVerificationEmail(user.email, verificationToken);
-
-    // Autologin por cookie (puedes quitarlo si quieres requerir verificación antes)
+    // Set cookie (autologin). Si prefieres exigir verificación antes, quítalo.
     generateTokenAndSetCookie(res, user._id);
-    return res.status(201).json({ user, message: "Registered. Verification code sent." });
+
+    // RESPONDE primero (no bloquees por SMTP)
+    res.status(201).json({
+      user,
+      message: "Registered. Verification code sent to your email."
+    });
+
+    // Enviar verificación en background
+    bg(sendVerificationEmail(user.email, verificationToken), "verification-email");
   } catch (err) {
     console.error("register error:", err);
     return res.status(500).json({ error: "Server error" });
@@ -103,8 +115,11 @@ export const verifyEmail = async (req, res) => {
     user.verificationTokenExpiresAt = undefined;
     await user.save();
 
-    await sendWelcomeEmail(user.email, user.name);
-    return res.json({ success: true, message: "Email verified" });
+    // Responde ya (no bloquees por SMTP)
+    res.json({ success: true, message: "Email verified" });
+
+    // Welcome en background
+    bg(sendWelcomeEmail(user.email, user.name), "welcome-email");
   } catch (err) {
     console.error("verifyEmail error:", err);
     return res.status(500).json({ error: "Server error" });
@@ -122,8 +137,11 @@ export const resendVerificationCode = async (req, res) => {
     user.verificationTokenExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
     await user.save();
 
-    await sendVerificationEmail(user.email, user.verificationToken);
-    return res.json({ success: true, message: "Verification code resent" });
+    // Responde primero
+    res.json({ success: true, message: "Verification code resent" });
+
+    // Envío en background
+    bg(sendVerificationEmail(user.email, user.verificationToken), "verification-resend");
   } catch (err) {
     console.error("resendVerificationCode error:", err);
     return res.status(500).json({ error: "Server error" });
@@ -145,9 +163,12 @@ export const forgotPassword = async (req, res) => {
     await user.save();
 
     const resetURL = `${process.env.CLIENT_URL || "http://localhost:5173"}/reset-password/${rawToken}`;
-    await sendPasswordResetEmail(user.email, resetURL);
 
-    return res.json({ success: true, message: "If the email exists, we sent a link" });
+    // Responde primero
+    res.json({ success: true, message: "If the email exists, we sent a link" });
+
+    // Envío en background
+    bg(sendPasswordResetEmail(user.email, resetURL), "reset-link");
   } catch (err) {
     console.error("forgotPassword error:", err);
     return res.status(500).json({ error: "Server error" });
@@ -174,8 +195,11 @@ export const resetPassword = async (req, res) => {
     user.resetPasswordExpiresAt = undefined;
     await user.save();
 
-    await sendResetSuccessEmail(user.email);
-    return res.json({ success: true, message: "Password updated" });
+    // Responde primero
+    res.json({ success: true, message: "Password updated" });
+
+    // Notificación en background
+    bg(sendResetSuccessEmail(user.email), "reset-success");
   } catch (err) {
     console.error("resetPassword error:", err);
     return res.status(500).json({ error: "Server error" });
