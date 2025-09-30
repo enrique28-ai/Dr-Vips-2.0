@@ -12,11 +12,6 @@ import { nanoid } from "nanoid"; // <-- sin crypto
 // Helpers para códigos/tokens
 const gen6Code = () => (Math.floor(100000 + Math.random() * 900000)).toString(); // 6 dígitos
 
-// Utilidad: dispara una promesa en background y loggea errores
-const bg = (promise, label) =>
-  Promise.resolve(promise)
-    .then(() => console.log(`${label} sent`))
-    .catch((err) => console.error(`${label} failed:`, err?.message || err));
 
 // POST /api/auth/register
 export const register = async (req, res) => {
@@ -49,7 +44,7 @@ export const register = async (req, res) => {
     });
 
     // Enviar verificación en background
-    bg(sendVerificationEmail(user.email, verificationToken), "verification-email");
+    await sendVerificationEmail(user.email, user.verificationToken);
   } catch (err) {
     console.error("register error:", err);
     return res.status(500).json({ error: "Server error" });
@@ -119,7 +114,7 @@ export const verifyEmail = async (req, res) => {
     res.json({ success: true, message: "Email verified" });
 
     // Welcome en background
-    bg(sendWelcomeEmail(user.email, user.name), "welcome-email");
+    await sendWelcomeEmail(user.email, user.name);
   } catch (err) {
     console.error("verifyEmail error:", err);
     return res.status(500).json({ error: "Server error" });
@@ -141,7 +136,7 @@ export const resendVerificationCode = async (req, res) => {
     res.json({ success: true, message: "Verification code resent" });
 
     // Envío en background
-    bg(sendVerificationEmail(user.email, user.verificationToken), "verification-resend");
+    await sendVerificationEmail(user.email, user.verificationToken);
   } catch (err) {
     console.error("resendVerificationCode error:", err);
     return res.status(500).json({ error: "Server error" });
@@ -168,7 +163,7 @@ export const forgotPassword = async (req, res) => {
     res.json({ success: true, message: "If the email exists, we sent a link" });
 
     // Envío en background
-    bg(sendPasswordResetEmail(user.email, resetURL), "reset-link");
+    await sendPasswordResetEmail(user.email, resetURL);
   } catch (err) {
     console.error("forgotPassword error:", err);
     return res.status(500).json({ error: "Server error" });
@@ -199,7 +194,7 @@ export const resetPassword = async (req, res) => {
     res.json({ success: true, message: "Password updated" });
 
     // Notificación en background
-    bg(sendResetSuccessEmail(user.email), "reset-success");
+    await sendResetSuccessEmail(user.email);
   } catch (err) {
     console.error("resetPassword error:", err);
     return res.status(500).json({ error: "Server error" });
